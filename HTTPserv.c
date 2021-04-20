@@ -60,10 +60,17 @@ int main(int argc, char **argv) {
     * Server-Adresse von der Kommandozeile lesen,
     * falls vorhanden.
     */
-    if (argc >= 2) {
-        docroot = argv[1]; // Pfad zur html file
-    } else {
-        docroot = "docroot_2/folder/index.html";  // Use default
+//    if (argc >= 2) {
+//        docroot = argv[1]; // Pfad zur html file
+//    } else {
+//        docroot = "docroot_2/folder/index.html";  // Use default
+//    }
+
+    if ( argc >= 2 ) {
+        srvr_addr = argv[1]; // Addr on cmdline
+    }
+    else {
+        srvr_addr = "127.0.0.1";  // Use default address
     }
 
     /*
