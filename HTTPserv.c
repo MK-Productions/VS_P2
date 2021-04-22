@@ -2,139 +2,76 @@
 // Created by Markus Kapp on 20.04.21.
 //
 
-/*
-* File:   daytime.c
-* Author: Heinz-Josef Eikerling
-*
-*         Implementierung des Daytime-Service.
-*		   Compile: gcc -o daytime daytime.c
-*		   Aufruf: daytime oder daytime <host address> <host port>
-*
-* Created on 10. M�rz 2012, 21:54
-*/
-
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <string.h>
-#include <time.h>
-#include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+#include <sys/types.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 #include <arpa/inet.h>
+#include <stdarg.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
 #include <netdb.h>
-#include <stdbool.h>
 
-/*
- * Fehler ausgeben und Programm beenden.
- */
-static void handleError(const char *cause) {
-    if (errno != 0) {
-        fputs(strerror(errno), stderr);
-        fputs(": ", stderr);
-    }
-    fputs(cause, stderr);
-    fputc('\n', stderr);
-    exit(1);
+#define SERVER_PORT 8080
+#define MAXLINE 4096
+#define SOCKET_ADDRESS struct sockaddr
+
+void printError(const char *errorMessage) {
+    printf("%s", errorMessage);
 }
 
-/*
- * main-Funktion
- */
 int main(int argc, char **argv) {
-    int z;
-    char *srvr_addr = "127.0.0.1";
-    char *srvr_port = "8080";
-    struct sockaddr_in adr_srvr; // AF_INET
-    struct sockaddr_in adr_clnt; // AF_INET
-    int addr_len;                // length
-    int s;                       // Socket
-    int c;                       // Client socket
-    int n;                       // bytes
-    time_t td;                   // Current date&time
-    char *docroot;
-    char tstamp[128];
+    int sockfd;
+    int n;
+    int sendBytes;
+    struct sockaddr_in servaddr;
+    char sendLine[MAXLINE];
+    char receiveLine[MAXLINE];
 
-    /*
-    * Server-Adresse von der Kommandozeile lesen,
-    * falls vorhanden.
-    */
-//    if (argc >= 2) {
-//        docroot = argv[1]; // Pfad zur html file
-//    } else {
-//        docroot = "docroot_2/folder/index.html";  // Use default
-//    }
-
-    if ( argc >= 2 ) {
-        srvr_addr = argv[1]; // Addr on cmdline
-    }
-    else {
-        srvr_addr = "127.0.0.1";  // Use default address
+    if (argc != 2) {
+        printError("server address error");
     }
 
-    /*
-    * Server-Port von der Kommandozeile lesen,
-    * falls vorhanden.
-    */
-    if (argc >= 3) {
-        srvr_port = argv[2];
+    // create socket
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printError("Error while creating socket");
     }
 
-    /*
-    * Socket anlegen.
-    */
-    s = socket(PF_INET, SOCK_STREAM, 0);
-    if (s == -1) {
-        handleError("socket()");
-    }
-    memset(&adr_srvr, 0, sizeof adr_srvr);
-    adr_srvr.sin_family = AF_INET;
-    adr_srvr.sin_port = htons(atoi(srvr_port));
-    if (strcmp(srvr_addr, "*") != 0) {
-        adr_srvr.sin_addr.s_addr = inet_addr(srvr_addr); // Normal Address
-        if (adr_srvr.sin_addr.s_addr == INADDR_NONE) {
-            handleError("bad address.");
-        }
-    } else {
-        adr_srvr.sin_addr.s_addr = INADDR_ANY; // Wild Address
+    bzero(&servaddr, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port = htons(SERVER_PORT);
+
+    if (inet_pton(AF_INET, argv[1], &servaddr.sin_addr) <= 0) {
+        printError("inet_pton error");
     }
 
-    /* Adresse an Server binden. */
-    addr_len = sizeof adr_srvr;
-    z = bind(s, (struct sockaddr *) &adr_srvr, addr_len);
-    if (z == -1) {
-        handleError("bind(2)");
+    // connect to server
+    if (connect(sockfd, (SOCKET_ADDRESS *) &servaddr, sizeof(servaddr)) < 0) {
+        printError("connect failed!");
     }
 
-    z = listen(s, 10);
-    if (z == -1) {
-        handleError("listen(2)");
+    sprintf(sendLine, "GET / HTTP/1.1\r\n\r\n");
+    sendBytes = strlen(sendLine);
+
+    if (write(sockfd, sendLine, sendBytes) != sendBytes) {
+        printError("write error");
     }
 
-    while (true) {
-        /* Server Loop. Auf Anfragen warten und diese auswerten */
-        addr_len = sizeof adr_clnt;
-        c = accept(s, (struct sockaddr *) &adr_clnt, &addr_len);
+    // read server response
+    while ((n = read(sockfd, receiveLine, MAXLINE-1)) > 0) {
+        printf("%s", receiveLine);
 
-        if (c == -1) {
-            handleError("accept(2)");
-        }
-
-        /* Zeitstempel erzeugen */
-        time(&td);
-        n = (int) "lul";
-
-//        /* Ergebnis an Client geben */
-        z = write(c, tstamp, n);
-        if (z == -1) {
-            handleError("write(2)");
-        }
-
-        printf("lul");
-
-        /* Verbindung schlie�en */
-        close(c);
+        memset(receiveLine, 0, MAXLINE);
     }
-    return 0;
+
+    if (n < 0) {
+        printError("read error");
+    }
+
+    exit(0);
 }
